@@ -22,7 +22,7 @@ struct sockaddr_in6{
     struct int6_addr sin6_addr;
     u_int32_t sin6_scope_id;
 };
-
+//test
 struct in6_addr{
     unsigned char sa_addr[16];
 }
