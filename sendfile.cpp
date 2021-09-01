@@ -7,15 +7,25 @@
 #include<stdlib.h>
 #include<errno.h>
 #include<string.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<fcntl.h>
+#include<sys/sendfile.h>
 
 int main(int argc,char* argv[]){
 
     if(argc <= 2){
-        printf("usage: %s ip_address port_number\n",basename(argv[0]));
+        printf("usage: %s ip_address port_number filename\n",basename(argv[0]));
         return 1;
     }
     const char* ip = argv[1];
     int port = atoi(argv[2]);
+    const char* file_name = argv[3];
+
+    int filefd = open(file_name,O_RDONLY);
+    assert(filefd > 0);
+    struct stat stat_buf;
+    fstat(filefd,&stat_buf);
 
     struct sockaddr_in address;
     bzero(&address,sizeof(address));
@@ -42,9 +52,7 @@ int main(int argc,char* argv[]){
     }else{
         //char remote[INET_ADDRSTRLEN];
         //printf("connected with ip: %s and port : %d\n",inet_ntop(AF_INET,&client.sin_addr,remote,INET_ADDRSTRLEN),ntohs(client.sin_port));
-        close(STDOUT_FILENO);
-        dup(connfd);
-        printf("abcd\n");
+        sendfile(connfd,filefd,NULL,stat_buf.st_size);
         close(connfd);
     }
 

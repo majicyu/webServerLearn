@@ -7,6 +7,8 @@
 #include<stdlib.h>
 #include<errno.h>
 #include<string.h>
+#include<fcntl.h>
+
 
 int main(int argc,char* argv[]){
 
@@ -42,9 +44,13 @@ int main(int argc,char* argv[]){
     }else{
         //char remote[INET_ADDRSTRLEN];
         //printf("connected with ip: %s and port : %d\n",inet_ntop(AF_INET,&client.sin_addr,remote,INET_ADDRSTRLEN),ntohs(client.sin_port));
-        close(STDOUT_FILENO);
-        dup(connfd);
-        printf("abcd\n");
+        int pipefd[2];
+        assert(ret != -1);
+        ret = pipe(pipefd);
+        ret = splice(connfd,NULL,pipefd[1],NULL,32768,SPLICE_F_MORE | SPLICE_F_MOVE);
+        assert(ret != -1);
+        ret = splice(pipefd[0],NULL,connfd,NULL,32768,SPLICE_F_MORE | SPLICE_F_MOVE);
+        assert(ret != -1);
         close(connfd);
     }
 
