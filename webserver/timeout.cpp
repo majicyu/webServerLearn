@@ -10,7 +10,9 @@
 #include <unistd.h>
 #include <string.h>
 
+//timeout function
 int timeout_connect(const char* ip,int port,int time){
+
     int ret = 0;
     struct sockaddr_in address;
     bzero(&address,sizeof(address));
