@@ -1,4 +1,3 @@
-#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -10,10 +9,12 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <sys/epoll.h>
-#include <sys/signal.h>
+#include <signal.h>
 #include <sys/wait.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <fcntl.h>
+
 
 
 #define USER_LIMIT 5
@@ -35,7 +36,7 @@ int epollfd;
 int listenfd;
 int shmfd;
 char* share_mem = 0;
-client_data* user = 0;
+client_data* users = 0;
 int* sub_process = 0;
 int user_count = 0;
 bool stop_child = false;
@@ -260,7 +261,7 @@ int main(int argc,char* argv[]){
             }
             else if((sockfd == sig_pipefd[0]) && (events[i].events & EPOLLIN)){
                 int sig;
-                char signal[1024];
+                char signals[1024];
                 ret = recv(sig_pipefd[0],signals,sizeof(signals),0);
                 if(ret == -1){
                     continue;
@@ -280,7 +281,7 @@ int main(int argc,char* argv[]){
                                                  if((del_user < 0) || (del_user > USER_LIMIT)){
                                                      continue;
                                                  }
-                                                 epoll_ctl(epollfd,EPOLL_CTL_DEL,users[del_user.pipefd[0]],0);
+                                                 epoll_ctl(epollfd,EPOLL_CTL_DEL,users[del_user].pipefd[0],0);
                                                  close(users[del_user].pipefd[0]);
                                                  users[del_user] = users[--user_count];
 
@@ -323,9 +324,9 @@ int main(int argc,char* argv[]){
                 }
                 else{
                     for(int j=0;j<user_count;++j){
-                        if(users[j],pipdfd[0] != sockfd){
+                        if(users[j].pipefd[0] != sockfd){
                             printf("send data to child across pipe\n");
-                            sned(users[j].pipefd[0],(char*)&child,sizeof(child),0);
+                            send(users[j].pipefd[0],(char*)&child,sizeof(child),0);
                         }
                     }
                 }
@@ -337,105 +338,3 @@ int main(int argc,char* argv[]){
     return 0;
 }
 
-    while(1){
-        ret = poll(fds,user_counter+1,-1);
-        if(ret < 0){
-            printf("poll failure\n");
-            break;
-        }
-
-        for(int i=0;i<user_counter+1;++i){
-            if((fds[i].fd == listenfd) && (fds[i].revents & POLLIN)){
-                struct sockaddr_in client_address;
-                socklen_t client_addlength = sizeof(client_address);
-                int connfd = accept(listenfd,(struct sockaddr*)&client_address,&client_addlength);
-
-                if(connfd < 0){
-                    printf("errno is :%d\n",errno);
-                    continue;
-                }
-
-                //若请求太多，则关闭新的连接
-                if(user_counter >= USER_LIMIT){
-                    const char* info = "too many users\n";
-                    printf("%s",info);
-                    send(connfd,info,strlen(info),0);
-                    continue;
-                }
-
-                //对于新的连接，同时修改fds和users数组
-                user_counter++;
-                users[connfd].address = client_address;
-                setnoblocking(connfd);
-                fds[user_counter].fd = connfd;
-                fds[user_counter].events = POLLIN | POLLRDHUP | POLLERR;
-                fds[user_counter].revents = 0;
-                printf("comes a new user,now have %d users\n",user_counter);
-            }
-            else if(fds[i].revents & POLLERR){
-                printf("get an error from %d\n",fds[i].fd);
-                char errors[100];
-                memset(errors,'\0',100);
-                socklen_t length = sizeof(errors);
-                if(getsockopt(fds[i].fd,SOL_SOCKET,SO_ERROR,&errors,&length) < 0){
-                    printf("get socket option failed\n");
-                }
-                continue;
-            }
-            else if(fds[i].revents & POLLRDHUP){
-                //如果客户端关闭连接，则服务器也关闭对应的连接，并将用户数量减1
-                users[fds[i].fd] = users[fds[user_counter].fd];
-                close(fds[i].fd);
-                fds[i] = fds[user_counter];
-                i--;
-                user_counter--;
-                printf("a client left");
-            }
-            else if(fds[i].revents | POLLIN){
-                int connfd = fds[i].fd;
-                memset(users[connfd].buf,'\0',BUFFER_SIZE);
-                ret = recv(connfd,users[connfd].buf,BUFFER_SIZE-1,0);
-                printf("get %d bytes of client data %s from %d\n",ret,users[connfd].buf,connfd);
-                if(ret < 0){
-                    //如果读操作出错，则关闭连接
-                    if(errno != EAGAIN){
-                        close(connfd);
-                        users[fds[i].fd] = users[fds[user_counter].fd];
-                        fds[i] = fds[user_counter];
-                        i--;
-                        user_counter--;
-                    }
-                }
-                else if(ret == 0){
-
-                }
-                else{
-                    //如果接收到客户数据，则通知其他socket连接准备写数据
-                    for(int j=1;j<=user_counter;++j){
-                        if(fds[j].fd == connfd){
-                            continue;
-                        }
-
-                        fds[j].events |= ~POLLIN;
-                        fds[j].events |= POLLOUT;
-                        users[fds[i].fd].write_buf = users[connfd].buf;
-                    }
-                }
-            }
-            else if(fds[i].revents & POLLOUT){
-                int connfd = fds[i].fd;
-                if(!users[connfd].write_buf){
-                    continue;
-                }
-                ret = send(connfd,users[connfd].write_buf,strlen(users[connfd].write_buf),0);
-                users[connfd].write_buf = NULL;
-                fds[i].events |= ~POLLOUT;
-                fds[i].events |= POLLIN;
-            }
-        }
-    }
-
-    delete [] users;
-    close(listenfd);
-    return 0;
-}
