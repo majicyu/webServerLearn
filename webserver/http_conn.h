@@ -78,7 +78,7 @@ private:
     CHECK_STATE m_check_state;
     METHOD m_method;
 
-    char m_real_life[FILENAME_LEN];
+    char m_real_file[FILENAME_LEN];
     char* m_url;
     char* m_version;
     int m_content_length;
