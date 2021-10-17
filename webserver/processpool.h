@@ -120,7 +120,7 @@ static void addsig(int sig,void(handler)(int),bool restart = true){
 }
 
 //进程池构造函数，参数listenfd是监听socket，它必须在创建进程池之前被创建，否则子进程无法直接引用它，参数process_number指定进程池中子进程的数量
-template<template T>
+template<typename T>
 processpool<T>::processpool(int listenfd,int process_number):m_listenfd(listenfd),m_process_number(process_number),m_idx(-1),m_stop(false){
     assert((process_number > 0)&&(process_number <= MAX_PROCESS_NUMBER));
     m_sub_process = new process[process_number];
@@ -130,7 +130,7 @@ processpool<T>::processpool(int listenfd,int process_number):m_listenfd(listenfd
         int ret = socketpair(PF_UNIX,SOCK_STREAM,0,m_sub_process[i].m_pipefd);
         assert(ret == 0);
 
-        m_sub_process[i]m_pid = fork();
+        m_sub_process[i].m_pid = fork();
         assert(m_sub_process[i].m_pid >= 0);
         if(m_sub_process[i].m_pid > 0){
             close(m_sub_process[i].m_pipefd[1]);
@@ -158,14 +158,14 @@ void processpool<T>::setup_sig_pipe(){
     addfd(m_epollfd,sig_pipefd[0]);
 
     //设置信号处理函数
-    addsig(SIGCHID,sig_handler);
+    addsig(SIGCHLD,sig_handler);
     addsig(SIGTERM,sig_handler);
     addsig(SIGINT,sig_handler);
     addsig(SIGPIPE,SIG_IGN);
 }
 
 //父进程中m_idx值为-1,子进程中m_idx值大于等于0,我们据此判断接下来要运行的时父进程还是子进程代码
-template<template T>
+template<typename T>
 void processpool<T>::run(){
     if(m_idx != -1){
         run_child();
@@ -229,7 +229,7 @@ void processpool<T>::run_child(){
                             case SIGCHLD:{
                                              pid_t pid;
                                              int stat;
-                                             while((pid = waitpid(-1,&stat,WHOHANG)) > 0 ){
+                                             while((pid = waitpid(-1,&stat,WNOHANG)) > 0 ){
                                                      continue;
                                                      }
                                                      break;
@@ -268,9 +268,10 @@ template<typename T>
 void processpool<T>::run_parent(){
     setup_sig_pipe();
 
+    //父进程监听m_listenfd
     addfd(m_epollfd,m_listenfd);
 
-    epoll_vent events[MAX_EVENT_NUMBER];
+    epoll_event events[MAX_EVENT_NUMBER];
     int sub_process_counter = 0;
     int new_conn = 1;
     int number = 0;
@@ -285,6 +286,7 @@ void processpool<T>::run_parent(){
         for(int i=0;i<number;i++){
             int sockfd = events[i].data.fd;
             if(sockfd == m_listenfd){
+                //如果有新连接到来，就采用Round Robin方式将其分配给一个子进程处理
                 int i = sub_process_counter;
                 do{
                     if(m_sub_process[i].m_pid != -1){
@@ -302,10 +304,11 @@ void processpool<T>::run_parent(){
                 send(m_sub_process[i].m_pipefd[0],(char*)&new_conn,sizeof(new_conn),0);
                 printf("send request to child\n",i);
             }
+            //处理父进程接收到的信号
             else if((sockfd == sig_pipefd[0])&&(events[i].events&EPOLLIN)){
                 int sig;
                 char signals[1024];
-                ret = recv(sig_pipefd[0],signals,sieof(signals),0);
+                ret = recv(sig_pipefd[0],signals,sizeof(signals),0);
                 if(ret <= 0){
                     continue;
                 }
@@ -324,6 +327,7 @@ void processpool<T>::run_parent(){
                                                      }
                                                  }
                                                      }
+                                             //如果所有子进程都已经退出了，则父进程也退出
                                              m_stop = true;
                                              for(int i=0;i<m_process_number;++i){
                                                  if(m_sub_process[i].m_pid != -1){
@@ -334,10 +338,11 @@ void processpool<T>::run_parent(){
                                          }
                             case SIGTERM:
                             case SIGINT:{
+                                //如果父进程接收到终止信号，那么就杀死所有子进程，并等待它们全部结束。当然，通知子进程结束的更好的方法是向父子进程之间的通信管道发送特殊数据
                                 printf("kill all the child now\n");
                                 for(int i=0;i<m_process_number;++i){
                                     int pid = m_sub_process[i].m_pid;
-                                    if(m_pi != -1){
+                                    if(pid != -1){
                                         kill(pid,SIGTERM);
                                     }
                                 }

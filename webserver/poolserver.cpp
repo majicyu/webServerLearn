@@ -10,9 +10,9 @@
 #include <cassert>
 #include <sys/epoll.h>
 
-#include "locker.h"
-#include "threadpool.h"
-#include "http_conn.h"
+#include "./tws/lock/locker.h"
+#include "./tws/threadpool/threadpool.h"
+#include "./tws/http/http_conn.h"
 
 #define MAX_FD 65536
 #define MAX_EVNET_NUMBER 10000

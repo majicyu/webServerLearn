@@ -27,7 +27,7 @@ public:
     client_data* user_data;
     tw_timer* next;
     tw_timer* prev;
-}
+};
 
 class time_wheel{
 public:
