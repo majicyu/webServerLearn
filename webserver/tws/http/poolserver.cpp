@@ -10,9 +10,9 @@
 #include <cassert>
 #include <sys/epoll.h>
 
-#include "./tws/lock/locker.h"
-#include "./tws/threadpool/threadpool.h"
-#include "./tws/http/http_conn.h"
+#include "../lock/locker.h"
+#include "../threadpool/threadpool.h"
+#include "http_conn.h"
 
 #define MAX_FD 65536
 #define MAX_EVNET_NUMBER 10000
@@ -45,8 +45,10 @@ int main(int argc,char* argv[]){
     const char* ip = argv[1];
     int port = atoi(argv[2]);
 
+    //忽略SIGPIPE信号
     addsig(SIGPIPE,SIG_IGN);
 
+    //创建线程池
     threadpool<http_conn>* pool = NULL;
     try{
         pool = new threadpool<http_conn>;
@@ -55,6 +57,7 @@ int main(int argc,char* argv[]){
         return 1;
     }
 
+    //预先为每个可能的客户连接分配一个http_conn对象
     http_conn* users = new http_conn[MAX_FD];
     assert(users);
     int user_count = 0;
@@ -95,7 +98,7 @@ int main(int argc,char* argv[]){
             if(sockfd == listenfd){
                 struct sockaddr_in client_address;
                 socklen_t client_addrlength = sizeof(client_address);
-                int connfd = accept(listenfd,(struct sockaddr_in*)&client_address,&client_addrlength);
+                int connfd = accept(listenfd,(struct sockaddr*)&client_address,&client_addrlength);
 
                 if(connfd < 0){
                     printf("errno is : %d\n",errno);
@@ -106,12 +109,15 @@ int main(int argc,char* argv[]){
                     continue;
                 }
 
+                //初始化客户连接
                 users[connfd].init(connfd,client_address);
             }
             else if(events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)){
+                //若有异常，直接关闭客户连接
                 users[sockfd].close_conn();
             }
             else if(events[i].events & EPOLLIN){
+                //根据读的结果，决定是将任务添加到线程池还是关闭连接
                 if(users[sockfd].read()){
                     pool->append(users+sockfd);
                 }
@@ -120,6 +126,7 @@ int main(int argc,char* argv[]){
                 }
             }
             else if(events[i].events & EPOLLOUT){
+                //根据写的结果，决定是否关闭连接
                 if(!users[sockfd].write()){
                     users[sockfd].close_conn();
                 }

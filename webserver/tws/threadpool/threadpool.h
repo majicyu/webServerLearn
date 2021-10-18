@@ -5,7 +5,7 @@
 #include <cstdio>
 #include <exception>
 #include <pthread.h>
-#include "locker.h"
+#include "../lock/locker.h"
 
 template<typename T>
 class threadpool{
@@ -41,7 +41,7 @@ threadpool<T>::threadpool(int thread_number,int max_requests):m_thread_number(th
     for(int i=0;i<thread_number;++i){
         printf("create the %dth thread\n",i);
         if(pthread_create(m_threads+i,NULL,worker,this)!=0){
-            delete [] threads;
+            delete [] m_threads;
             throw std::exception();
         }
         if(pthread_detach(m_threads[i])){
@@ -70,8 +70,15 @@ bool threadpool<T>::append(T* request){
     return true;
 }
 
+template <typename T>
+void* threadpool<T>::worker(void* arg){
+    threadpool* pool = (threadpool*)arg;
+    pool->run();
+    return pool;
+}
+
 template<typename T>
-void *threadpool<T>::run(){
+void threadpool<T>::run(){
     while(!m_stop){
         m_queuestat.wait();
         m_queuelocker.lock();
