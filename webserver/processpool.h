@@ -302,7 +302,7 @@ void processpool<T>::run_parent(){
                 }
                 sub_process_counter = (i+1)%m_process_number;
                 send(m_sub_process[i].m_pipefd[0],(char*)&new_conn,sizeof(new_conn),0);
-                printf("send request to child\n",i);
+                printf("send request to child %d\n",i);
             }
             //处理父进程接收到的信号
             else if((sockfd == sig_pipefd[0])&&(events[i].events&EPOLLIN)){
