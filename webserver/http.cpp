@@ -16,7 +16,7 @@
 enum CHECK_STATE { CHECK_STATE_REQUESTLINE = 0, CHECKE_STATE_HEADER };
 
 //从状态机的三种状态，即行的读取状态，分别表示：读取到一个完整的行、行出错和行数据尚且不完整
- enum LINE_STATUS { LINE_OK = 0, LINE_BAD, LINE_OPEN };
+enum LINE_STATUS { LINE_OK = 0, LINE_BAD, LINE_OPEN };
 
 //服务器的请求结果：NO_REQUSET表示请求不完整，需要继续读取客户数据;GET_REQUEST表示获得了一个完整的客户请求;BAD_REQUEST表示客户端请求有语法错误;FORBIDDEN_REQUEST表示客户对资源没有足够的访问权限;INTERNAL_ERROR表示服务器内部错误;CLOSED_CONNECTION表示客户端已经关闭连接了
 enum HTTP_CODE { NO_REQUEST, GET_REQUEST, BAD_REQUEST, FORBIDDEN_REQUEST, INTERNAL_ERROR, CLOSED_CONNECTION };
@@ -63,7 +63,7 @@ LINE_STATUS parse_line(char* buffer,int& checked_index,int& read_index){
 
 //分析请求行
 HTTP_CODE parse_requestline(char* temp,CHECK_STATE& checkstate){
-    char* url = strpbrk(temp,"\t");
+    char* url = strpbrk(temp," \t");
     //如果请求行中没有空白字符或"\t"字符，则HTTP请求必有问题
     if(!url){
         return BAD_REQUEST;
@@ -78,13 +78,13 @@ HTTP_CODE parse_requestline(char* temp,CHECK_STATE& checkstate){
         return BAD_REQUEST;
     }
 
-    url += strspn(url,"\t");
-    char* version = strpbrk(url,"\t");
+    url += strspn(url," \t");
+    char* version = strpbrk(url," \t");
     if(!version){
         return BAD_REQUEST;
     }
     *version++ = '\0';
-    version += strspn(version,"\t");
+    version += strspn(version," \t");
     //仅支持HTTP/1.1
     if(strcasecmp(version,"HTTP/1.1") != 0){
         return BAD_REQUEST;
@@ -94,9 +94,16 @@ HTTP_CODE parse_requestline(char* temp,CHECK_STATE& checkstate){
         url += 7;
         url = strchr(url,'/');
     }
+    if(strncasecmp(url,"https://",8) == 0){
+        url += 8;
+        url = strchr(url,'/');
+    }
 
     if(!url || url[0]!='/'){
         return BAD_REQUEST;
+    }
+    if(strlen(url) == 1){
+        strcat(url,"index.html");
     }
     printf("The request URL is:%s\n",url);
     //HTTP请求行处理完毕，状态转移到头部字段的分析
@@ -107,18 +114,19 @@ HTTP_CODE parse_requestline(char* temp,CHECK_STATE& checkstate){
 //分析头部字段
 HTTP_CODE parse_headers(char* temp){
     //遇到一个空行，说明我们得到了一个正确的HTTP请求
+    //printf("test%s",temp);
     if(temp[0] == '\0'){
         return GET_REQUEST;
     }
-    else if(strncasecmp(temp,"HOST:",5) == 0){
+    else if(strncasecmp(temp,"Host:",5) == 0){
         temp += 5;
-        temp += strspn(temp,"\t");
+        temp += strspn(temp," \t");
         printf("the request host is: %s\n",temp);
     }
     else{
         printf("I can not handle this header\n");
     }
-    return BAD_REQUEST;
+    return NO_REQUEST;
 }
 
 //分析http请求的入口函数
@@ -129,8 +137,8 @@ HTTP_CODE parse_content(char* buffer,int& checked_index,CHECK_STATE& checkstate,
     while((linestatus = parse_line(buffer,checked_index,read_index)) == LINE_OK){
         char* temp = buffer + start_line;
         start_line = checked_index;
-        //checked_index记录主状态机当前的状态
-        switch(checked_index){
+        //checkstate记录主状态机当前的状态
+        switch(checkstate){
             case CHECK_STATE_REQUESTLINE:
                 {
                     retcode = parse_requestline(temp,checkstate);
