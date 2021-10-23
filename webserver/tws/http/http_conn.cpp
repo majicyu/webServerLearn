@@ -279,15 +279,15 @@ http_conn::HTTP_CODE http_conn::process_read(){
 //当得到一个完整、正确的HTTP请求时，我们就分析目标文件的属性。如果目标文件存在、对所有用户可读、且不是目录，则使用mmap将其映射到内存地址m_file_address处，告诉调用者获取文件成功
 http_conn::HTTP_CODE http_conn::do_request(){
     strcpy(m_real_file,doc_root);
-    printf("1%s\n",m_real_file);
+    //printf("1%s\n",m_real_file);
     int len = strlen(doc_root);
     strncpy(m_real_file+len,m_url,FILENAME_LEN-len-1);
-    printf("2%s\n",m_real_file);
+    //printf("2%s\n",m_real_file);
     //printf("%s",m_file_stat);
     if(stat(m_real_file,&m_file_stat) < 0){
         return NO_RESOURCE;
     }
-    printf("3%s\n",m_real_file);
+    //printf("3%s\n",m_real_file);
     if(!(m_file_stat.st_mode & S_IROTH)){
         return FORBIDDEN_REQUEST;
     }
